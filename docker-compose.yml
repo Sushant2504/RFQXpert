@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # RAG Service - Document processing and embedding generation
+  rag-service:
+    build:
+      context: .
+      dockerfile: docker/rag-service/Dockerfile
+    container_name: rfqxpert-rag-service
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - PYTHONPATH=/app
+      - DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data
+      - ./RAG/data:/app/RAG/data
+      - ./rag_ready.flag:/app/rag_ready.flag
+    networks:
+      - rfqxpert-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # LLM Pipeline - ML agents processing
+  llm-pipeline:
+    build:
+      context: .
+      dockerfile: docker/llm-pipeline/Dockerfile
+    container_name: rfqxpert-llm-pipeline
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - PYTHONPATH=/app
+      - DATA_DIR=/app/data
+      - RAG_DATA_DIR=/app/RAG/data
+    volumes:
+      - ./data:/app/data
+      - ./RAG/data:/app/RAG/data
+      - ./rag_ready.flag:/app/rag_ready.flag
+    networks:
+      - rfqxpert-network
+    depends_on:
+      rag-service:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - pipeline
+
+  # Data Service - Results serving
+  data-service:
+    build:
+      context: .
+      dockerfile: docker/data-service/Dockerfile
+    container_name: rfqxpert-data-service
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - rfqxpert-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/data"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend - Next.js UI
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: rfqxpert-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    networks:
+      - rfqxpert-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  rfqxpert-network:
+    driver: bridge
+
+volumes:
+  rfqxpert-data:
+    driver: local
