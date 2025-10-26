@@ -1,0 +1,107 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: llm-pipeline-job
+  namespace: rfqxpert
+  labels:
+    app: llm-pipeline
+spec:
+  template:
+    metadata:
+      labels:
+        app: llm-pipeline
+    spec:
+      containers:
+      - name: llm-pipeline
+        image: rfqxpert/llm-pipeline:latest
+        imagePullPolicy: Never  # Use local image
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rfqxpert-secrets
+              key: GEMINI_API_KEY
+        envFrom:
+        - configMapRef:
+            name: rfqxpert-config
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app/data
+        - name: rag-data
+          mountPath: /app/RAG/data
+        - name: flag-file
+          mountPath: /app/rag_ready.flag
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: rfqxpert-data-pvc
+      - name: rag-data
+        persistentVolumeClaim:
+          claimName: rfqxpert-data-pvc
+      - name: flag-file
+        emptyDir: {}
+      restartPolicy: Never
+  backoffLimit: 3
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: llm-pipeline-cron
+  namespace: rfqxpert
+  labels:
+    app: llm-pipeline
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: llm-pipeline
+        spec:
+          containers:
+          - name: llm-pipeline
+            image: rfqxpert/llm-pipeline:latest
+            imagePullPolicy: Never
+            env:
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rfqxpert-secrets
+                  key: GEMINI_API_KEY
+            envFrom:
+            - configMapRef:
+                name: rfqxpert-config
+            volumeMounts:
+            - name: shared-data
+              mountPath: /app/data
+            - name: rag-data
+              mountPath: /app/RAG/data
+            - name: flag-file
+              mountPath: /app/rag_ready.flag
+            resources:
+              requests:
+                memory: "1Gi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+          volumes:
+          - name: shared-data
+            persistentVolumeClaim:
+              claimName: rfqxpert-data-pvc
+          - name: rag-data
+            persistentVolumeClaim:
+              claimName: rfqxpert-data-pvc
+          - name: flag-file
+            emptyDir: {}
+          restartPolicy: Never
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3

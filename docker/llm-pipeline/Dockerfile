@@ -27,7 +27,7 @@ RUN mkdir -p /app/RAG/data
 COPY RAG/data/ ./RAG/data/
 
 # Copy the flag file location
-COPY rag_ready.flag ./rag_ready.flag 2>/dev/null || echo "Flag file not found, will be created at runtime"
+# Flag file will be created at runtime by the RAG service
 
 # Set environment variables
 ENV PYTHONPATH=/app

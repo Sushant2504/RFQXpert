@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-service
+  namespace: rfqxpert
+  labels:
+    app: rag-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-service
+  template:
+    metadata:
+      labels:
+        app: rag-service
+    spec:
+      containers:
+      - name: rag-service
+        image: rfqxpert/rag-service:latest
+        imagePullPolicy: Never  # Use local image
+        ports:
+        - containerPort: 8000
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rfqxpert-secrets
+              key: GEMINI_API_KEY
+        envFrom:
+        - configMapRef:
+            name: rfqxpert-config
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app/data
+        - name: rag-data
+          mountPath: /app/RAG/data
+        - name: flag-file
+          mountPath: /app/rag_ready.flag
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: shared-data
+        persistentVolumeClaim:
+          claimName: rfqxpert-data-pvc
+      - name: rag-data
+        persistentVolumeClaim:
+          claimName: rfqxpert-data-pvc
+      - name: flag-file
+        emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-service
+  namespace: rfqxpert
+  labels:
+    app: rag-service
+spec:
+  selector:
+    app: rag-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
